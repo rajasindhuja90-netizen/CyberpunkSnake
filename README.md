@@ -2,7 +2,7 @@
 
 Welcome to **Cyberpunk Snake**, a futuristic arcade-style snake game with neon visuals, dynamic levels, and interactive rewards!  
 
-Play directly in your browser on **desktop or mobile**.  
+Play directly in your browser on **desktop or laptop**.  
 
 ---
 
@@ -73,7 +73,7 @@ All game assets (images, audio) are included under the same license unless other
 
 ## 💻 Hosting
 
-This game is hosted on **GitHub Pages**, playable on both **desktop and mobile**:
+This game is hosted on **GitHub Pages**, playable on both **desktop and laptop**:
 https://rajasindhuja90-netizen.github.io/CyberpunkSnake/
 ---
 
