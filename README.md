@@ -45,7 +45,7 @@ This is a **level-based snake game** with unique features:
 
 ## 📂 How to Play
 
-1. Open the game on your browser: [GitHub Pages Link](https://<your-username>.github.io/CyberpunkSnake/)  
+1. Open the game on your browser: https://github.com/rajasindhuja90-netizen/CyberpunkSnake.git 
 2. Enter your **name** and select **gender**.  
 3. Use **arrow keys** to move the snake:
    - **↑**: Up  
@@ -70,7 +70,7 @@ This is a **level-based snake game** with unique features:
 ## 💻 Hosting
 
 This game is hosted on **GitHub Pages**, playable on both **desktop and mobile**:
-
+https://github.com/rajasindhuja90-netizen/CyberpunkSnake.git
 ---
 
 ## ⚡ Technologies Used
