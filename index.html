@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cyberpunk Snake Game 🐍🌌</title>
+<style>
+body { margin:0; overflow:hidden; background:#0a0a0a; display:flex; justify-content:center; align-items:center; height:100vh; }
+canvas { background:#0a0a0a; display:none; max-width:100%; max-height:100%; }
+#usernameInput {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:rgba(0,0,0,0.85); border:2px solid #0ff; padding:20px; color:#0ff;
+    font-size:20px; font-family:Consolas; text-align:center; border-radius:10px;
+}
+#usernameInput input, #usernameInput select { padding:5px; font-size:18px; border-radius:5px; border:none; outline:none; margin-top:5px; }
+#usernameInput button { margin-top:10px; padding:5px 15px; font-size:18px; border-radius:5px; border:none; cursor:pointer; background:#0ff; color:#000; }
+#restartButton { display:none; position:absolute; top:65%; left:50%; transform:translate(-50%,-50%); }
+#restartButton button { padding:10px 20px; font-size:20px; border-radius:10px; cursor:pointer; background:#0ff; color:#000; border:none; }
+#gameOverMessage {
+    display:none;
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-100%);
+    font-size:28px;
+    font-family:Consolas;
+    color:#FF1493;
+    text-align:center;
+    opacity:0;
+    transition: opacity 1s ease, transform 1s ease;
+}
+</style>
+</head>
+<body>
+
+<div id="usernameInput">
+    Enter your name:<br>
+    <input type="text" id="username" placeholder="Your Name" /><br>
+    Select Gender:<br>
+    <select id="gender">
+        <option value="male">Male 👨</option>
+        <option value="female">Female 👩</option>
+    </select><br>
+    <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="gameOverMessage">Oops! Better luck next time!</div>
+<div id="restartButton">
+    <button onclick="restartGame()">Restart</button>
+</div>
+
+<audio id="bgm" src="neon_loop.mp3" loop></audio>
+<canvas id="game"></canvas>
+
+<script>
+// ------------------- Setup -------------------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+function resizeCanvas(){ canvas.width=Math.min(window.innerWidth,600); canvas.height=Math.min(window.innerHeight,400);}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ------------------- Game Variables -------------------
+let baseCell=20, cellSize=baseCell;
+let snake=[{x:15,y:10}];
+let dir={x:1,y:0};
+let food={x:Math.floor(Math.random()*(canvas.width/baseCell)),y:Math.floor(Math.random()*(canvas.height/baseCell))};
+let score=0, level=1, levelUp=10, fps=8, username="Player", gender="male";
+let levelUpTriggered=false, gameStopped=false;
+const neonColors=["#39FF14","#FF1493","#14FFFF","#FFFF00","#FF8C00"];
+let drops=Array.from({length:120},()=>({x:Math.random()*canvas.width,y:Math.random()*-canvas.height,speed:1+Math.random()*2,color: neonColors[Math.floor(Math.random()*neonColors.length)]}));
+let lights=Array.from({length:30},()=>({x:Math.random()*canvas.width,y:Math.random()*canvas.height,color: neonColors[Math.floor(Math.random()*neonColors.length)],alpha: Math.random()}));
+let gifts=[];
+let hugProgress=0;
+
+// Trail
+let trail = [];
+let maxTrail = 15;
+
+// Snake head pulse variables
+let glowPulse=0, glowPulseDir=1;
+
+// Target pulse variables
+let targetGlow=0, targetGlowDir=1;
+
+// ------------------- Images -------------------
+let snakeImg=new Image(); snakeImg.src="snake.png";
+let pikachuImg=new Image(); pikachuImg.src="pikachu.png";
+let ashImg=new Image(); ashImg.src="ash.png";
+
+// ------------------- Cheer Messages -------------------
+function getCheerMessage(level){
+    if(level<=3) return "Awesome start! Keep going!";
+    if(level<=10) return "You rock! 💜";
+    if(level<=20) return "Amazing! 🌹";
+    if(level<=30) return "Fantastic! 🌸";
+    if(level<=40) return "Incredible! 🎉";
+    if(level<=50) return "🔥 On fire!";
+    if(level<=67) return "Legendary! Pokémon love!";
+}
+
+// ------------------- Gifts -------------------
+function getGiftType(level){
+    if(level<=10) return "heart";
+    if(level<=20) return "rose";
+    if(level<=30) return "cherry";
+    if(level<=40) return "confetti";
+    if(level<=50) return "fire";
+    if(level<=67) return "pikachu";
+}
+function initGifts(level){
+    gifts=[];
+    for(let i=0;i<50;i++){ gifts.push({x:Math.random()*canvas.width,y:Math.random()*-canvas.height,type:getGiftType(level),speed:1+Math.random()*2,alpha:0}); }
+}
+function drawGifts(){
+    gifts.forEach(g=>{
+        g.x+=Math.sin(Date.now()/500 + g.y)*0.5;
+        g.alpha+=0.02;if(g.alpha>1) g.alpha=1;
+        let symbol="💜";
+        if(g.type==="rose") symbol="🌹";
+        if(g.type==="cherry") symbol="🌸";
+        if(g.type==="confetti") symbol="🎉";
+        if(g.type==="fire") symbol="🔥";
+        if(g.type==="pikachu") symbol="⚡";
+        ctx.globalAlpha=g.alpha; ctx.font="24px Arial"; ctx.fillText(symbol,g.x,g.y);
+        ctx.globalAlpha=1; g.y+=g.speed;
+        if(g.y>canvas.height){g.y=-10; g.x=Math.random()*canvas.width; g.speed=1+Math.random()*2; g.alpha=0;}
+    });
+}
+
+// ------------------- Draw Functions -------------------
+function drawBackground(){
+    let gradient=ctx.createLinearGradient(0,0,0,canvas.height);
+    gradient.addColorStop(0,"#0c0c0c"); gradient.addColorStop(1,"#1a1a1a");
+    ctx.fillStyle=gradient; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle="rgba(0,255,255,0.05)"; ctx.lineWidth=1;
+    for(let x=0;x<canvas.width;x+=baseCell){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+    for(let y=0;y<canvas.height;y+=baseCell){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+    lights.forEach(l=>{ l.alpha+=(Math.random()-0.5)*0.05; if(l.alpha<0)l.alpha=0;if(l.alpha>1)l.alpha=1; ctx.fillStyle=l.color; ctx.globalAlpha=l.alpha; ctx.fillRect(l.x,l.y,2,2);});
+    ctx.globalAlpha=1;
+}
+
+function draw(){
+    drawBackground();
+    drops.forEach(d=>{ ctx.strokeStyle=d.color; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x,d.y+5); ctx.stroke(); d.y+=d.speed; if(d.y>canvas.height){d.y=-10; d.x=Math.random()*canvas.width; d.speed=1+Math.random()*2;} });
+
+    // Update target pulse
+    targetGlow+=targetGlowDir*0.2;
+    if(targetGlow>8) targetGlowDir=-1;
+    if(targetGlow<0) targetGlowDir=1;
+
+    // Draw target emoji with glow
+    let targetEmoji=gender==="female"?"👩":"👨";
+    ctx.font=cellSize+"px Arial";
+    ctx.shadowColor="#FF1493"; ctx.shadowBlur=10+targetGlow;
+    ctx.fillText(targetEmoji,food.x*cellSize,food.y*cellSize + cellSize);
+    ctx.shadowBlur=0;
+
+    // Draw neon trail
+    trail.forEach((t,i)=>{
+        let alpha = (1 - i / trail.length) * 0.6;
+        ctx.fillStyle = `rgba(57,255,20,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(t.x*cellSize + cellSize/2, t.y*cellSize + cellSize/2, cellSize/2, 0, Math.PI*2);
+        ctx.fill();
+    });
+
+    // Update snake head glow pulse
+    glowPulse+=glowPulseDir*0.2; if(glowPulse>5) glowPulseDir=-1; if(glowPulse<0) glowPulseDir=1;
+
+    // Draw snake
+    snake.forEach((s,i)=>{
+        if(i===0){
+            if(snakeImg.complete && snakeImg.naturalHeight!==0){
+                ctx.save(); ctx.shadowColor="#39FF14"; ctx.shadowBlur=10+glowPulse; ctx.drawImage(snakeImg,s.x*cellSize,s.y*cellSize,cellSize,cellSize); ctx.restore();
+            } else { ctx.fillStyle="#39FF14"; ctx.fillRect(s.x*cellSize,s.y*cellSize,cellSize,cellSize);}
+        } else {
+            if(snakeImg.complete && snakeImg.naturalHeight!==0){ ctx.drawImage(snakeImg,s.x*cellSize,s.y*cellSize,cellSize,cellSize); }
+            else { ctx.fillStyle="#00FF00"; ctx.fillRect(s.x*cellSize,s.y*cellSize,cellSize,cellSize);}
+        }
+    });
+
+    ctx.font="20px Consolas"; ctx.shadowBlur=10; ctx.shadowColor="#FFFF00"; ctx.fillStyle="#FFFF00"; ctx.fillText(`Score: ${score}  Level: ${level}`,10,25); ctx.shadowBlur=0;
+
+    if(levelUpTriggered){ drawGifts(); ctx.fillStyle="#FF1493"; ctx.font="24px Consolas"; ctx.fillText(getCheerMessage(level),canvas.width/2-150,50); }
+    if(level>=51){ drawPokemonHug(level); }
+}
+
+// ------------------- Pokémon Hug -------------------
+function drawPokemonHug(level){
+    hugProgress = Math.min((level - 50)/17, 1);
+    let ease = hugProgress*hugProgress*(3-2*hugProgress);
+    let xP = canvas.width/2 - 50 - 50*(1 - ease);
+    let xA = canvas.width/2 + 50 + 50*(1 - ease);
+    let y = canvas.height/2; let scale=0.5+0.5*ease;
+    ctx.save(); ctx.translate(xP+25,y+25); ctx.scale(scale,scale); ctx.drawImage(pikachuImg,-25,-25,50,50); ctx.restore();
+    ctx.save(); ctx.translate(xA+25,y+25); ctx.scale(scale,scale); ctx.drawImage(ashImg,-25,-25,50,50); ctx.restore();
+}
+
+// ------------------- Update -------------------
+function update(){
+    if(gameStopped) return;
+    let head={x:snake[0].x+dir.x, y:snake[0].y+dir.y};
+
+    // Collision
+    if(head.x<0||head.x>=canvas.width/cellSize||head.y<0||head.y>=canvas.height/cellSize||snake.some(s=>s.x===head.x&&s.y===head.y)){
+        gameStopped=true; levelUpTriggered=false; document.getElementById('bgm').pause();
+        const msg=document.getElementById('gameOverMessage'); msg.style.display='block';
+        setTimeout(()=>{ msg.style.opacity=1; msg.style.transform='translate(-50%,-50%)'; },50);
+        document.getElementById('restartButton').style.display='block';
+        return;
+    }
+
+    snake.unshift(head);
+
+    // Update trail
+    trail.unshift({x:head.x,y:head.y});
+    if(trail.length>maxTrail) trail.pop();
+
+    // Eat food
+    if(head.x===food.x&&head.y===food.y){
+        score++; levelUpTriggered=true;
+        if(score%levelUp===0){ level++; cellSize=baseCell+Math.min(level*2,40); fps+=1; initGifts(level);}
+        food={x:Math.floor(Math.random()*(canvas.width/cellSize)),y:Math.floor(Math.random()*(canvas.height/cellSize))};
+    } else snake.pop();
+}
+
+// ------------------- Controls -------------------
+document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowUp'&&dir.y===0) dir={x:0,y:-1};
+    if(e.key==='ArrowDown'&&dir.y===0) dir={x:0,y:1};
+    if(e.key==='ArrowLeft'&&dir.x===0) dir={x:-1,y:0};
+    if(e.key==='ArrowRight'&&dir.x===0) dir={x:1,y:0};
+});
+
+// ------------------- Loop -------------------
+function loop(){ update(); draw(); if(!gameStopped) setTimeout(loop,1000/fps); }
+
+// ------------------- Start & Restart -------------------
+function startGame(){
+    const input=document.getElementById('username').value;
+    username=input?input:"Player";
+    gender=document.getElementById('gender').value;
+    document.getElementById('usernameInput').style.display='none';
+    canvas.style.display='block';
+    document.getElementById('bgm').play();
+    gameStopped=false;
+    loop();
+}
+function restartGame(){
+    snake=[{x:15,y:10}]; dir={x:1,y:0}; score=0; level=1; cellSize=baseCell; fps=8; levelUpTriggered=false; gifts=[]; hugProgress=0; trail=[];
+    gameStopped=false;
+    document.getElementById('restartButton').style.display='none';
+    const msg=document.getElementById('gameOverMessage'); msg.style.display='none'; msg.style.opacity=0; msg.style.transform='translate(-50%,-100%)';
+    document.getElementById('bgm').play();
+    loop();
+}
+</script>
+
+</body>
+</html>
+
