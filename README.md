@@ -45,7 +45,7 @@ This is a **level-based snake game** with unique features:
 
 ## 📂 How to Play
 
-1. Open the game on your browser: https://github.com/rajasindhuja90-netizen/CyberpunkSnake.git 
+1. Open the game on your browser:https://rajasindhuja90-netizen.github.io/CyberpunkSnake/
 2. Enter your **name** and select **gender**.  
 3. Use **arrow keys** to move the snake:
    - **↑**: Up  
@@ -59,18 +59,22 @@ This is a **level-based snake game** with unique features:
 ---
 
 ## 🖼️ Images & Audio Used
-
-- `snake.png` → Snake head and body  
+ 
 - `pikachu.png` → Pokémon hug animation  
 - `ash.png` → Pokémon hug animation  
 - `neon_loop.mp3` → Background music  
 
 ---
+### License
+
+This project is licensed under the **MIT License**.  
+All game assets (images, audio) are included under the same license unless otherwise noted.
+---
 
 ## 💻 Hosting
 
 This game is hosted on **GitHub Pages**, playable on both **desktop and mobile**:
-https://github.com/rajasindhuja90-netizen/CyberpunkSnake.git
+https://rajasindhuja90-netizen.github.io/CyberpunkSnake/
 ---
 
 ## ⚡ Technologies Used
