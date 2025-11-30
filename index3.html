@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cyberpunk Neon Snake3 — Neo Tokyo</title>
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,Consolas,monospace;overflow:hidden;}
+#wrap{position:relative;height:100vh;display:flex;align-items:center;justify-content:center;gap:18px;padding:22px;}
+.canvasBox{border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;box-shadow:0 12px 30px rgba(10,20,40,0.12);background:linear-gradient(#0f1720,#111835);}
+canvas{border-radius:10px;display:block;}
+.panel{width:320px;border-radius:12px;padding:16px;box-shadow:0 8px 18px rgba(14,20,30,0.06);background:#f6f8fa;}
+h1{margin:0;font-size:20px;letter-spacing:0.4px;}
+label{display:block;margin-top:10px;font-size:13px;}
+input,select,button{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(11,16,32,0.06);font-size:14px;}
+.row{display:flex;gap:8px;margin-top:10px;}
+.button{flex:1;cursor:pointer;font-weight:700;}
+#score{position:absolute;left:32px;top:32px;padding:8px 12px;border-radius:10px;font-weight:700;box-shadow:0 6px 18px rgba(20,30,40,0.06);color:#fff;}
+#gameOver{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:18px;border-radius:12px;box-shadow:0 14px 40px rgba(10,20,40,0.12);text-align:center;color:white;background:rgba(0,0,0,0.8);}
+#gameOver b{display:block;margin-top:8px;}
+.rankBoard{margin-top:12px;text-align:left;}
+.rankBoard div{margin:2px 0;font-size:14px;}
+.touchPad{position:absolute;right:18px;bottom:18px;width:110px;height:110px;border-radius:12px;display:none;align-items:center;justify-content:center;}
+.arrow{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;background:rgba(255,255,255,0.1);color:white;font-weight:700;}
+@media(max-width:700px){.panel{width:86vw}.touchPad{display:flex;}}
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div class="canvasBox">
+    <canvas id="game" width="720" height="480"></canvas>
+    <div style="margin-top:10px;font-size:13px;color:#aaa;">Use arrow keys / WASD or on-screen arrows (mobile)</div>
+  </div>
+  <div class="panel">
+    <h1>Cyberpunk Neon3 — Neo Tokyo</h1>
+    <label>Your Name</label>
+    <input id="name" value="You">
+    <div class="row">
+      <button id="start" class="button">Start</button>
+      <button id="pause" class="button">Pause</button>
+    </div>
+  </div>
+  <div id="score">Score: 0 • Level: 1 • Coins: 0</div>
+  <div id="gameOver">
+    <div id="gameOverMsg">Game Over!</div>
+    <b id="finalScore">Score: 0</b>
+    <div class="rankBoard" id="rankBoard"></div>
+    <div style="margin-top:12px"><button id="restart" class="button">Restart</button></div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let CELL=20,W=canvas.width,H=canvas.height;
+let cols=Math.floor(W/CELL),rows=Math.floor(H/CELL);
+let snake=[],dir={x:1,y:0},food=null;
+let score=0,level=1,baseSpeed=8,speed=baseSpeed;
+let running=false,paused=false;
+let username='Player';
+
+const nameInput=document.getElementById('name');
+const startBtn=document.getElementById('start');
+const pauseBtn=document.getElementById('pause');
+const restartBtn=document.getElementById('restart');
+const scoreDom=document.getElementById('score');
+const gameOverBox=document.getElementById('gameOver');
+const finalScore=document.getElementById('finalScore');
+const rankBoard=document.getElementById('rankBoard');
+
+function randomCell(){return {x:Math.floor(Math.random()*cols),y:Math.floor(Math.random()*rows)};}
+function resetGame(){
+  username=nameInput.value.trim()||'You';
+  snake=[{x:Math.floor(cols/2),y:Math.floor(rows/2)}];
+  dir={x:1,y:0}; food=randomCell();
+  score=0; level=1; speed=baseSpeed;
+  gameOverBox.style.display='none';
+  updateHUD();
+}
+function drawBG(){ctx.fillStyle='#0f1720';ctx.fillRect(0,0,W,H);}
+function drawSnake(){for(let s of snake){ctx.fillStyle='#00c2ff';ctx.fillRect(s.x*CELL,s.y*CELL,CELL,CELL);}}
+function drawFood(){ctx.fillStyle='#ff3399';ctx.fillRect(food.x*CELL,food.y*CELL,CELL,CELL);}
+function updateHUD(){let coins=score*level;scoreDom.textContent=`Score: ${score} • Level: ${level} • Coins: ${coins}`;}
+function showGameOver(){
+  running=false; gameOverBox.style.display='block';
+  let coins=score*level; finalScore.textContent=`Score: ${score} • Coins: ${coins}`;
+  // Save scores in localStorage
+  let scores=JSON.parse(localStorage.getItem('snakeRanks')||'[]');
+  scores.push({name:username,points:coins});
+  scores.sort((a,b)=>b.points-a.points);
+  localStorage.setItem('snakeRanks',JSON.stringify(scores));
+  // Render Rank Board
+  rankBoard.innerHTML='';
+  scores.slice(0,5).forEach((p,i)=>{
+    let badge='🪵';
+    if(i===0) badge='🥇';
+    else if(i===1) badge='🥈';
+    else if(i===2) badge='🥉';
+    rankBoard.innerHTML+=`<div>${badge} ${p.name} - ${p.points} pts</div>`;
+  });
+}
+
+let raf,acc=0,lastTime=performance.now();
+function gameLoop(now){
+  if(!running || paused){ lastTime=performance.now(); return;}
+  const dt=now-lastTime; lastTime=now;
+  acc+=dt/1000*speed;
+  while(acc>=1){ step(); acc-=1;}
+  render(); raf=requestAnimationFrame(gameLoop);
+}
+function step(){
+  let head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(head.x<0) head.x=cols-1; if(head.x>=cols) head.x=0;
+  if(head.y<0) head.y=rows-1; if(head.y>=rows) head.y=0;
+  if(snake.some((s,i)=>i>0 && s.x===head.x && s.y===head.y)){showGameOver(); return;}
+  snake.unshift(head);
+  if(head.x===food.x && head.y===food.y){score++; if(score%10===0) level++; food=randomCell();}
+  else snake.pop();
+  updateHUD();
+}
+function render(){drawBG(); drawSnake(); drawFood();}
+
+document.addEventListener('keydown',e=>{
+  if(!running||paused) return;
+  if((e.key==='ArrowUp'||e.key==='w')&&dir.y===0)dir={x:0,y:-1};
+  if((e.key==='ArrowDown'||e.key==='s')&&dir.y===0)dir={x:0,y:1};
+  if((e.key==='ArrowLeft'||e.key==='a')&&dir.x===0)dir={x:-1,y:0};
+  if((e.key==='ArrowRight'||e.key==='d')&&dir.x===0)dir={x:1,y:0};
+});
+
+startBtn.onclick=()=>{resetGame();running=true;paused=false;acc=0;raf=requestAnimationFrame(gameLoop);}
+restartBtn.onclick=()=>{resetGame();running=true;paused=false;acc=0;raf=requestAnimationFrame(gameLoop);}
+pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?'Resume':'Pause'; if(!paused) raf=requestAnimationFrame(gameLoop);}
+
+resetGame(); render();
+</script>
+</body>
+</html>
