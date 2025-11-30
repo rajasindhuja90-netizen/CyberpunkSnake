@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cyberpunk Neon Snake — Neo Tokyo</title>
+<style>
+:root{
+  --bg-dark:#0f1720; --panel-dark:#f6f8fa; --text-dark:#0b1020;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,Consolas,monospace;overflow:hidden}
+#wrap{position:relative;height:100vh;display:flex;align-items:center;justify-content:center;gap:18px;padding:22px}
+.canvasBox{border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;box-shadow:0 12px 30px rgba(10,20,40,0.12);background:linear-gradient(#0f1720,#111835);}
+canvas{border-radius:10px;display:block}
+.panel{width:320px;border-radius:12px;padding:16px;box-shadow:0 8px 18px rgba(14,20,30,0.06);background:#f6f8fa;}
+h1{margin:0;font-size:20px;letter-spacing:0.4px}
+label{display:block;margin-top:10px;font-size:13px}
+input,select,button{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(11,16,32,0.06);font-size:14px}
+.row{display:flex;gap:8px;margin-top:10px}
+.button{flex:1;cursor:pointer;font-weight:700}
+#score{position:absolute;left:32px;top:32px;padding:8px 12px;border-radius:10px;font-weight:700;box-shadow:0 6px 18px rgba(20,30,40,0.06);color:#ffffff;}
+#levelMsg{position:absolute;top:24px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:10px;opacity:0;transition:opacity .5s;color:#ffffff;font-weight:700;}
+#gameOver{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:18px;border-radius:12px;box-shadow:0 14px 40px rgba(10,20,40,0.12);text-align:center;color:white}
+#gameOver b{display:block;margin-top:8px}
+.touchPad{position:absolute;right:18px;bottom:18px;width:110px;height:110px;border-radius:12px;display:none;align-items:center;justify-content:center}
+.arrow{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;background:rgba(255,255,255,0.1);color:white;font-weight:700}
+@media (max-width:700px){
+  .panel{width:86vw}
+  .touchPad{display:flex}
+}
+.smallNote{font-size:12px;margin-top:8px;color:#aaa;}
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div class="canvasBox" id="canvasBox">
+    <canvas id="game" width="720" height="480" aria-label="Snake"></canvas>
+    <div style="margin-top:10px;font-size:13px;color:#aaa">Use arrow keys / WASD or on-screen arrows (mobile)</div>
+  </div>
+
+  <div class="panel" id="panel">
+    <h1>Cyberpunk Neon — Neo Tokyo</h1>
+    <label for="name">Enter your display name</label>
+    <input id="name" placeholder="Your name" value="You" maxlength="18" />
+    <label for="crush">Enter your crush's name</label>
+    <input id="crush" placeholder="Crush name" value="Crush" maxlength="18" />
+    <div class="row">
+      <button id="start" class="button">Start</button>
+      <button id="pause" class="button">Pause</button>
+      <button id="theme" class="button">Set Snake Color</button>
+    </div>
+    <div class="smallNote">Restart resumes from pause. Highscore saved per name.</div>
+  </div>
+
+  <div id="score">Score: 0 • Level: 1 • Gift: 🎁</div>
+  <div id="levelMsg">You are doing great! 💖</div>
+
+  <div id="gameOver">
+    <div id="gameOverMsg" style="font-size:18px;">Oops! Better luck next time!</div>
+    <b id="finalScore">Score: 0</b>
+    <div id="bestScore">Highscore: 0</div>
+    <div style="margin-top:12px"><button id="restart" class="button">Restart</button></div>
+  </div>
+
+  <div class="touchPad" id="pad">
+    <div style="position:relative;width:100%;height:100%">
+      <div class="arrow up" style="position:absolute;left:37px;top:6px">↑</div>
+      <div class="arrow left" style="position:absolute;left:6px;top:37px">←</div>
+      <div class="arrow right" style="position:absolute;right:6px;top:37px">→</div>
+      <div class="arrow down" style="position:absolute;left:37px;bottom:6px">↓</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let CELL = 20;
+let W = canvas.width, H = canvas.height;
+let cols = Math.floor(W / CELL), rows = Math.floor(H / CELL);
+let snake = [], dir = {x:1,y:0}, food = null;
+let score = 0, level = 1;
+let baseSpeed = 8, speed = baseSpeed;
+let running = false, paused = false;
+let username = 'Player', crushName='Crush';
+let scoreFlashTimer = 0;
+let darkTheme = true;
+let snakeColor = '#00c2ff';
+
+// DOM Elements
+const nameInput = document.getElementById('name');
+const crushInput = document.getElementById('crush');
+const startBtn = document.getElementById('start');
+const restartBtn = document.getElementById('restart');
+const pauseBtn = document.getElementById('pause');
+const themeBtn = document.getElementById('theme');
+const scoreDom = document.getElementById('score');
+const gameOverBox = document.getElementById('gameOver');
+const finalScore = document.getElementById('finalScore');
+const bestScore = document.getElementById('bestScore');
+const gameOverMsg = document.getElementById('gameOverMsg');
+
+// ================= Grid & Reset =================
+function syncGrid(){ W = canvas.width; H = canvas.height; cols = Math.floor(W/CELL); rows = Math.floor(H/CELL); }
+function randomCell(){ return {x: Math.floor(Math.random()*cols), y: Math.floor(Math.random()*rows)}; }
+
+function resetGameState(){
+  username = (nameInput.value || 'You').trim() || 'You';
+  crushName = (crushInput.value || 'Crush').trim() || 'Crush';
+  snake = [{x: Math.floor(cols/2), y: Math.floor(rows/2)}];
+  dir = {x:1,y:0};
+  food = randomCell();
+  score = 0; level = 1; speed = baseSpeed; scoreFlashTimer=0;
+  updateHUD();
+  gameOverBox.style.display='none';
+}
+
+// ================= Draw Functions =================
+let glowTick = 0;
+function drawBackground(){
+  ctx.fillStyle = darkTheme?'#0f1720':'#ffffff';
+  ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = darkTheme?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 1;
+  for(let x=0;x<W;x+=CELL){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=CELL){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
+
+function drawSnake(){
+  glowTick += 0.1;
+  for(let i=snake.length-1;i>=0;i--){
+    const s = snake[i];
+    const px = s.x*CELL, py = s.y*CELL;
+    ctx.save();
+    const glow = 4 + Math.sin(glowTick*3)*3;
+    ctx.shadowColor = snakeColor;
+    ctx.shadowBlur = glow;
+    ctx.fillStyle = snakeColor;
+    const thickness = CELL - Math.min(4, Math.floor(level/8));
+    ctx.fillRect(px+(CELL-thickness)/2, py+(CELL-thickness)/2, thickness, thickness);
+    ctx.restore();
+  }
+}
+
+function drawFood(){
+  const px = food.x*CELL, py = food.y*CELL;
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#ff3399';
+  ctx.font = `${CELL-2}px Arial`;
+  ctx.fillText(crushName[0], px+4, py+CELL-4);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ================= Gift Mapping =================
+function getGift(score){
+  if(score>=1 && score<=10) return '🌹';
+  if(score>=11 && score<=20) return '🌸';
+  if(score>=21 && score<=30) return '⚡';
+  if(score>=31 && score<=40) return '🔥';
+  if(score>=41 && score<=50) return '🎉';
+  if(score>=51 && score<=60) return '💧';
+  if(score>=61 && score<=70) return '🌙';
+  if(score>=71 && score<=80) return '⭐';
+  if(score>=81 && score<=90) return '❤️';
+  if(score>=91 && score<=100) return '💍';
+  return '🎁';
+}
+
+// ================= HUD & Game Over =================
+function updateHUD(){ 
+  const gift = getGift(score);
+  scoreDom.textContent = `Score: ${score} • Level: ${level} • Gift: ${gift}`;
+}
+
+function showGameOver(){
+  running=false;
+  gameOverBox.style.display='block';
+  gameOverMsg.textContent = `Oops! ${username} Better luck next time!`;
+  finalScore.textContent = `Score: ${score}`;
+  const best = parseInt(localStorage.getItem(username)||'0');
+  if(score>best){ localStorage.setItem(username, score); bestScore.textContent='New Highscore!'; }
+  else bestScore.textContent=`Highscore: ${best}`;
+}
+
+// ================= Game Loop =================
+let raf=null, acc=0, lastTime=performance.now();
+function gameLoop(now){
+  if(!running || paused){ lastTime=performance.now(); return; }
+  const dt = now - lastTime; lastTime=now;
+  acc += dt/1000*speed;
+  while(acc>=1){ stepGame(); acc-=1; }
+  renderAll();
+  raf=requestAnimationFrame(gameLoop);
+}
+
+function stepGame(){
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(head.x<0) head.x=cols-1; if(head.x>=cols) head.x=0;
+  if(head.y<0) head.y=rows-1; if(head.y>=rows) head.y=0;
+  if(snake.some((s,i)=>i>0 && s.x===head.x && s.y===head.y)){ showGameOver(); return; }
+  snake.unshift(head);
+  if(head.x===food.x && head.y===food.y){
+    score += 1;
+    if(score%10===0){ level++; speed = baseSpeed+Math.min(8,Math.floor(level/6)); }
+    food=randomCell();
+  } else snake.pop();
+  updateHUD();
+}
+
+function renderAll(){ 
+  syncGrid(); 
+  drawBackground(); 
+  drawSnake(); 
+  drawFood();
+}
+
+// ================= Controls =================
+document.addEventListener('keydown', e=>{
+  if(!running || paused) return;
+  if((e.key==='ArrowUp'||e.key==='w') && dir.y===0) dir={x:0,y:-1};
+  if((e.key==='ArrowDown'||e.key==='s') && dir.y===0) dir={x:0,y:1};
+  if((e.key==='ArrowLeft'||e.key==='a') && dir.x===0) dir={x:-1,y:0};
+  if((e.key==='ArrowRight'||e.key==='d') && dir.x===0) dir={x:1,y:0};
+});
+
+document.getElementById('pad').querySelectorAll('.arrow').forEach(el=>{
+  el.addEventListener('touchstart', ev=>{
+    ev.preventDefault(); const txt=el.textContent.trim();
+    if(paused) return;
+    if(txt==='↑' && dir.y===0) dir={x:0,y:-1};
+    if(txt==='↓' && dir.y===0) dir={x:0,y:1};
+    if(txt==='←' && dir.x===0) dir={x:-1,y:0};
+    if(txt==='→' && dir.x===0) dir={x:1,y:0};
+  });
+});
+
+// ================= Buttons =================
+startBtn.addEventListener('click', ()=>{
+  resetGameState(); running=true; paused=false; acc=0;
+  if(raf) cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(gameLoop);
+  if(window.innerWidth<720) document.getElementById('pad').style.display='flex';
+});
+
+restartBtn.addEventListener('click', ()=>{
+  resetGameState(); running=true; paused=false; acc=0;
+  if(raf) cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(gameLoop);
+});
+
+pauseBtn.addEventListener('click', ()=>{
+  if(!running) return;
+  paused = !paused;
+  pauseBtn.textContent = paused ? 'Resume':'Pause';
+  if(!paused) raf=requestAnimationFrame(gameLoop);
+});
+
+themeBtn.addEventListener('click', ()=>{
+  const color = prompt('Enter your favorite snake color (hex or name):', snakeColor);
+  if(color) snakeColor = color;
+});
+
+resetGameState();
+renderAll();
+</script>
+</body>
+</html>
